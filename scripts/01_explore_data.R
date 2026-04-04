@@ -44,7 +44,7 @@ first_year <- 2017
 
 cat("\n")
 cat("===================================================================\n")
-cat("  A. SNAPSHOT ACTUAL — Emisiones CO2 (%d)\n", latest_year)
+cat(sprintf("  A. SNAPSHOT ACTUAL — Emisiones CO2 (%d)\n", latest_year))
 cat("===================================================================\n\n")
 
 # --- A1. Resumen estadistico ------------------------------------------------
@@ -179,6 +179,8 @@ print(top_emitters)
 # Top emisores — barplot
 top20 <- latest[order(-totalQuantityTon)][1:20]
 top20[, label := paste0(substr(facilityName, 1, 25), " (", countryCode, ")")]
+# Hacer labels unicos (puede haber duplicados por truncar nombres)
+top20[, label := make.unique(label, sep = " #")]
 top20[, label := factor(label, levels = rev(label))]
 
 p_top <- ggplot2::ggplot(top20,
@@ -230,7 +232,7 @@ save_plot(p_country, "01_emisiones_por_pais.png")
 
 cat("\n")
 cat("===================================================================\n")
-cat("  B. TENDENCIA TEMPORAL — Evolucion %d-%d\n", first_year, latest_year)
+cat(sprintf("  B. TENDENCIA TEMPORAL — Evolucion %d-%d\n", first_year, latest_year))
 cat("===================================================================\n\n")
 
 # Filtrar periodo con reporte homogeneo

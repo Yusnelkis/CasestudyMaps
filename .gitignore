@@ -1,0 +1,41 @@
+# R History & Environment
+.Rhistory
+.RData
+.Rproj.user/
+.Renviron
+.Rprofile
+
+# renv
+renv/library/
+renv/staging/
+renv/sandbox/
+renv/cellar/
+
+# Output files (regenerable)
+output/*.png
+output/*.jpg
+output/*.pdf
+output/*.tif
+output/*.csv
+
+# Large spatial data files
+data/*.tif
+data/*.shp
+data/*.shx
+data/*.dbf
+data/*.prj
+data/*.gpkg
+data/*.geojson
+data/*.nc
+
+# Keep placeholder files
+!data/README.md
+!output/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

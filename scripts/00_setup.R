@@ -19,7 +19,8 @@ cran_pkgs <- c(
   "R6",           # Clases R6 (usado por mbg internamente)
   "scales",       # Escalas para graficos
   "viridis",      # Paletas de color
-  "countrycode"   # Codigos de pais ISO/NUTS
+  "countrycode",  # Codigos de pais ISO/NUTS
+  "jsonlite"      # API JSON (DiscoData)
 )
 
 installed <- installed.packages()[, "Package"]

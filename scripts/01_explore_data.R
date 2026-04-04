@@ -9,51 +9,58 @@ load_project_packages()
 
 # --- 1. Cargar datos E-PRTR -------------------------------------------------
 
-co2_data <- load_eprtr_co2("data/eprtr_facilities.csv")
+co2_data <- load_eprtr_co2()
 
 cat("\n=== Estructura de los datos ===\n")
 str(co2_data)
 
-cat("\n=== Resumen de emisiones CO2 (toneladas/anio) ===\n")
-summary(co2_data$totalQuantity)
+# Convertir kg a toneladas para legibilidad
+co2_data[, totalQuantityTon := totalQuantityKg / 1000]
 
-cat("\nEmisiones totales:", format(sum(co2_data$totalQuantity), big.mark = ","),
-    "toneladas\n")
+cat("\n=== Resumen de emisiones CO2 (toneladas/anio) ===\n")
+summary(co2_data$totalQuantityTon)
+
+cat("\nEmisiones totales (ultimo anio disponible):\n")
+latest_year <- max(co2_data$reportingYear)
+latest <- co2_data[reportingYear == latest_year]
+cat(sprintf("  Anio: %d | Instalaciones: %d | Total: %s toneladas\n",
+            latest_year, nrow(latest),
+            format(sum(latest$totalQuantityTon), big.mark = ",")))
 
 # --- 2. Distribucion por sector industrial -----------------------------------
 
-cat("\n=== Emisiones por sector ===\n")
-sector_summary <- co2_data[, .(
+cat("\n=== Emisiones por sector (ultimo anio) ===\n")
+sector_summary <- latest[, .(
   n_facilities = .N,
-  total_co2 = sum(totalQuantity),
-  mean_co2 = mean(totalQuantity),
-  median_co2 = median(totalQuantity)
-), by = mainActivityName][order(-total_co2)]
+  total_co2_ton = sum(totalQuantityTon),
+  mean_co2_ton = mean(totalQuantityTon),
+  median_co2_ton = median(totalQuantityTon)
+), by = mainActivity][order(-total_co2_ton)]
 
 print(head(sector_summary, 15))
 
 # --- 3. Distribucion por pais ------------------------------------------------
 
-cat("\n=== Emisiones por pais ===\n")
-country_summary <- co2_data[, .(
+cat("\n=== Emisiones por pais (ultimo anio) ===\n")
+country_summary <- latest[, .(
   n_facilities = .N,
-  total_co2 = sum(totalQuantity)
-), by = countryCode][order(-total_co2)]
+  total_co2_ton = sum(totalQuantityTon)
+), by = countryCode][order(-total_co2_ton)]
 
 print(head(country_summary, 20))
 
 # --- 4. Distribucion estadistica de emisiones --------------------------------
 
 # Las emisiones tienen distribucion muy sesgada -> transformacion log
-p_hist <- ggplot2::ggplot(co2_data, ggplot2::aes(x = log10(totalQuantity))) +
+p_hist <- ggplot2::ggplot(latest, ggplot2::aes(x = log10(totalQuantityTon))) +
   ggplot2::geom_histogram(bins = 50, fill = palette_satellite$blue_river,
                           color = "#FFFFFF", linewidth = 0.2) +
   ggplot2::labs(
     title = "Distribucion de emisiones industriales de CO2",
-    subtitle = "Escala log10 — Datos E-PRTR",
+    subtitle = sprintf("Escala log10 — E-PRTR %d", latest_year),
     x = "log10(CO2 toneladas/anio)",
     y = "Numero de instalaciones",
-    caption = "Fuente: European Industrial Emissions Portal (EEA)"
+    caption = "Fuente: EEA DiscoData API — Industrial Emissions Portal"
   ) +
   theme_satellite()
 
@@ -65,12 +72,8 @@ print(p_hist)
 # Cargar limites NUTS 0 (paises)
 nuts0 <- load_nuts(level = 0, path = "data/nuts/NUTS_RG_01M_2021_0_4326.geojson")
 
-# Filtrar solo UE (excluir territorios ultramarinos)
-eu_bbox <- sf::st_bbox(c(xmin = -12, ymin = 34, xmax = 45, ymax = 72),
-                       crs = 4326)
-
-# Convertir emisiones a sf
-co2_sf <- eprtr_to_sf(co2_data)
+# Convertir emisiones a sf (solo ultimo anio)
+co2_sf <- eprtr_to_sf(latest)
 
 # Version clara (fondo claro)
 p_map <- ggplot2::ggplot() +
@@ -78,7 +81,8 @@ p_map <- ggplot2::ggplot() +
                    linewidth = 0.3) +
   ggplot2::geom_sf(
     data = co2_sf,
-    ggplot2::aes(color = log10(totalQuantity), size = log10(totalQuantity)),
+    ggplot2::aes(color = log10(totalQuantityTon),
+                 size = log10(totalQuantityTon)),
     alpha = 0.6
   ) +
   scale_color_emissions(name = "log10(CO2\nton/anio)") +
@@ -86,18 +90,19 @@ p_map <- ggplot2::ggplot() +
   ggplot2::coord_sf(xlim = c(-12, 45), ylim = c(34, 72)) +
   theme_map() +
   ggplot2::labs(
-    title = "Emisiones industriales de CO2 en Europa",
+    title = sprintf("Emisiones industriales de CO2 en Europa (%d)", latest_year),
     subtitle = "Fuente: E-PRTR — European Industrial Emissions Portal",
     caption = "Paleta inspirada en imagen satelital falso color (IR cercano)"
   )
 
 # Version oscura (fondo oceano — estilo satelital)
 p_map_dark <- ggplot2::ggplot() +
-  ggplot2::geom_sf(data = nuts0, fill = "#142040", color = palette_satellite$cyan_dark,
-                   linewidth = 0.2) +
+  ggplot2::geom_sf(data = nuts0, fill = "#142040",
+                   color = palette_satellite$cyan_dark, linewidth = 0.2) +
   ggplot2::geom_sf(
     data = co2_sf,
-    ggplot2::aes(color = log10(totalQuantity), size = log10(totalQuantity)),
+    ggplot2::aes(color = log10(totalQuantityTon),
+                 size = log10(totalQuantityTon)),
     alpha = 0.7
   ) +
   scale_color_emissions(name = "log10(CO2\nton/anio)", palette = "warm") +
@@ -105,7 +110,7 @@ p_map_dark <- ggplot2::ggplot() +
   ggplot2::coord_sf(xlim = c(-12, 45), ylim = c(34, 72)) +
   theme_map_dark() +
   ggplot2::labs(
-    title = "Emisiones industriales de CO2 en Europa",
+    title = sprintf("Emisiones industriales de CO2 en Europa (%d)", latest_year),
     subtitle = "Fuente: E-PRTR — European Industrial Emissions Portal"
   )
 
@@ -117,9 +122,9 @@ print(p_map_dark)
 # --- 6. Top emisores ---------------------------------------------------------
 
 cat("\n=== Top 20 instalaciones por emision de CO2 ===\n")
-top_emitters <- co2_data[order(-totalQuantity), .(
-  facilityName, countryCode, mainActivityName,
-  co2_Mt = round(totalQuantity / 1e6, 2)
+top_emitters <- latest[order(-totalQuantityTon), .(
+  facilityName, countryCode, mainActivity,
+  co2_kton = round(totalQuantityTon / 1000, 1)
 )][1:20]
 
 print(top_emitters)

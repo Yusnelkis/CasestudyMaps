@@ -40,20 +40,21 @@ check_file <- function(path) {
   invisible(path)
 }
 
-#' Cargar datos E-PRTR filtrados para CO2
-load_eprtr_co2 <- function(path = "data/eprtr_facilities.csv") {
+#' Cargar datos E-PRTR de emisiones CO2
+#' Columnas: facilityName, longitude, latitude, countryCode, reportingYear,
+#'           mainActivity, nuts1, nuts2, nuts3, city, status,
+#'           totalQuantityKg, methodCode
+load_eprtr_co2 <- function(path = "data/eprtr_co2_emissions.csv") {
   check_file(path)
   dt <- data.table::fread(path)
 
-  # Filtrar solo emisiones de CO2 al aire con coordenadas validas
-  co2 <- dt[
-    pollutant == "Carbon dioxide (CO2 - excluding biomass)" &
-    medium == "Air" &
-    !is.na(longitude) & !is.na(latitude) &
-    totalQuantity > 0
-  ]
+  # Filtrar coordenadas validas y emisiones positivas
+  co2 <- dt[!is.na(longitude) & !is.na(latitude) & totalQuantityKg > 0]
 
-  cat(sprintf("E-PRTR CO2: %d instalaciones cargadas\n", nrow(co2)))
+  cat(sprintf("E-PRTR CO2: %d registros cargados (%d paises, %d-%d)\n",
+              nrow(co2),
+              length(unique(co2$countryCode)),
+              min(co2$reportingYear), max(co2$reportingYear)))
   co2
 }
 

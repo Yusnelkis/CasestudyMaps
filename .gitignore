@@ -25,8 +25,12 @@ data/*.shx
 data/*.dbf
 data/*.prj
 data/*.gpkg
-data/*.geojson
 data/*.nc
+data/*.rds
+data/nuts/*.geojson
+
+# Downloaded data (regenerable via 00_download_data.R)
+data/eprtr_co2_emissions.csv
 
 # Keep placeholder files
 !data/README.md

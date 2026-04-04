@@ -46,14 +46,16 @@ print(head(country_summary, 20))
 
 # Las emisiones tienen distribucion muy sesgada -> transformacion log
 p_hist <- ggplot2::ggplot(co2_data, ggplot2::aes(x = log10(totalQuantity))) +
-  ggplot2::geom_histogram(bins = 50, fill = "steelblue", color = "white") +
+  ggplot2::geom_histogram(bins = 50, fill = palette_satellite$blue_river,
+                          color = "#FFFFFF", linewidth = 0.2) +
   ggplot2::labs(
     title = "Distribucion de emisiones industriales de CO2",
     subtitle = "Escala log10 — Datos E-PRTR",
     x = "log10(CO2 toneladas/anio)",
-    y = "Numero de instalaciones"
+    y = "Numero de instalaciones",
+    caption = "Fuente: European Industrial Emissions Portal (EEA)"
   ) +
-  ggplot2::theme_minimal()
+  theme_satellite()
 
 print(p_hist)
 # save_plot(p_hist, "01_histograma_emisiones.png")
@@ -70,27 +72,47 @@ eu_bbox <- sf::st_bbox(c(xmin = -12, ymin = 34, xmax = 45, ymax = 72),
 # Convertir emisiones a sf
 co2_sf <- eprtr_to_sf(co2_data)
 
+# Version clara (fondo claro)
 p_map <- ggplot2::ggplot() +
-  ggplot2::geom_sf(data = nuts0, fill = "grey95", color = "grey70", linewidth = 0.3) +
+  ggplot2::geom_sf(data = nuts0, fill = col_land, color = col_borders,
+                   linewidth = 0.3) +
   ggplot2::geom_sf(
     data = co2_sf,
     ggplot2::aes(color = log10(totalQuantity), size = log10(totalQuantity)),
-    alpha = 0.5
+    alpha = 0.6
   ) +
-  ggplot2::scale_color_viridis_c(
-    name = "log10(CO2\nton/anio)",
-    option = "inferno"
-  ) +
+  scale_color_emissions(name = "log10(CO2\nton/anio)") +
   ggplot2::scale_size_continuous(range = c(0.3, 3), guide = "none") +
   ggplot2::coord_sf(xlim = c(-12, 45), ylim = c(34, 72)) +
   theme_map() +
+  ggplot2::labs(
+    title = "Emisiones industriales de CO2 en Europa",
+    subtitle = "Fuente: E-PRTR — European Industrial Emissions Portal",
+    caption = "Paleta inspirada en imagen satelital falso color (IR cercano)"
+  )
+
+# Version oscura (fondo oceano — estilo satelital)
+p_map_dark <- ggplot2::ggplot() +
+  ggplot2::geom_sf(data = nuts0, fill = "#142040", color = palette_satellite$cyan_dark,
+                   linewidth = 0.2) +
+  ggplot2::geom_sf(
+    data = co2_sf,
+    ggplot2::aes(color = log10(totalQuantity), size = log10(totalQuantity)),
+    alpha = 0.7
+  ) +
+  scale_color_emissions(name = "log10(CO2\nton/anio)", palette = "warm") +
+  ggplot2::scale_size_continuous(range = c(0.3, 3), guide = "none") +
+  ggplot2::coord_sf(xlim = c(-12, 45), ylim = c(34, 72)) +
+  theme_map_dark() +
   ggplot2::labs(
     title = "Emisiones industriales de CO2 en Europa",
     subtitle = "Fuente: E-PRTR — European Industrial Emissions Portal"
   )
 
 print(p_map)
+print(p_map_dark)
 # save_plot(p_map, "01_mapa_emisiones_europa.png")
+# save_plot(p_map_dark, "01_mapa_emisiones_dark.png")
 
 # --- 6. Top emisores ---------------------------------------------------------
 

@@ -102,32 +102,41 @@ cat("\n=== Agregacion a NUTS 2 ===\n")
 cat("\n=== Generando mapas ===\n")
 
 # --- 5a. Mapa de prediccion media (superficie continua de emisiones) ---
+# Usa la paleta pal_emissions del tema satelital
 # p_mean <- tmap::tm_shape(pred_raster_mean) +
 #   tmap::tm_raster(
 #     col = "mean_co2",
-#     palette = "YlOrRd",
+#     palette = pal_emissions,
 #     title = "log(CO2 ton/anio)"
 #   ) +
 #   tmap::tm_shape(nuts2_eu) +
-#   tmap::tm_borders(col = "grey40", lwd = 0.5) +
+#   tmap::tm_borders(col = palette_satellite$olive, lwd = 0.5) +
 #   tmap::tm_layout(
 #     title = "Emisiones industriales CO2 — Prediccion media",
-#     legend.outside = TRUE
+#     legend.outside = TRUE,
+#     bg.color = col_land
 #   )
 #
 # print(p_mean)
 # save_plot(p_mean, "05_mapa_prediccion_co2.png")
 
 # --- 5b. Mapa de incertidumbre (ancho del IC 95%) ---
+# Usa paleta cyan->navy para incertidumbre
+# pal_uncertainty <- c(palette_satellite$cyan_light,
+#                      palette_satellite$cyan,
+#                      palette_satellite$blue_river,
+#                      palette_satellite$navy)
+#
 # p_unc <- tmap::tm_shape(pred_raster_uncertainty) +
 #   tmap::tm_raster(
 #     col = "uncertainty",
-#     palette = "Blues",
+#     palette = pal_uncertainty,
 #     title = "Ancho IC 95%"
 #   ) +
 #   tmap::tm_layout(
 #     title = "Incertidumbre espacial de emisiones CO2",
-#     legend.outside = TRUE
+#     legend.outside = TRUE,
+#     bg.color = col_land
 #   )
 #
 # print(p_unc)
@@ -135,18 +144,15 @@ cat("\n=== Generando mapas ===\n")
 
 # --- 5c. Mapa coropletico NUTS 2 (emisiones agregadas por region) ---
 # p_nuts <- ggplot2::ggplot(nuts2_results) +
-#   ggplot2::geom_sf(ggplot2::aes(fill = mean_co2), color = "grey50",
+#   ggplot2::geom_sf(ggplot2::aes(fill = mean_co2), color = col_borders,
 #                    linewidth = 0.2) +
-#   ggplot2::scale_fill_viridis_c(
-#     name = "Media\nlog(CO2)",
-#     option = "inferno",
-#     na.value = "grey90"
-#   ) +
+#   scale_fill_emissions(name = "Media\nlog(CO2)", na.value = "#E8E6E0") +
 #   ggplot2::coord_sf(xlim = c(-12, 35), ylim = c(34, 72)) +
 #   theme_map() +
 #   ggplot2::labs(
 #     title = "Emisiones CO2 agregadas por region NUTS 2",
-#     subtitle = "Modelo geoestadistico mbg — con intervalos de credibilidad"
+#     subtitle = "Modelo geoestadistico mbg — con intervalos de credibilidad",
+#     caption = "Fuente: E-PRTR | Modelo: mbg (INLA + SPDE)"
 #   )
 #
 # print(p_nuts)

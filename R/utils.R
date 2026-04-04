@@ -2,6 +2,9 @@
 # utils.R — Funciones auxiliares para el caso de estudio E-PRTR
 # =============================================================================
 
+# Cargar paleta de colores y temas
+source("R/theme.R")
+
 #' Cargar paquetes del proyecto
 load_project_packages <- function() {
   pkgs <- c("mbg", "sf", "terra", "data.table", "caret", "ggplot2", "tmap")
@@ -75,13 +78,12 @@ load_nuts <- function(level = 2, path = NULL) {
   nuts
 }
 
-#' Tema de mapa limpio para ggplot2
+#' Tema de mapa limpio para ggplot2 (wrapper de theme_satellite)
 theme_map <- function() {
-  ggplot2::theme_minimal() +
+  theme_satellite() +
     ggplot2::theme(
       axis.text = ggplot2::element_blank(),
       axis.title = ggplot2::element_blank(),
-      panel.grid = ggplot2::element_line(color = "grey95"),
-      legend.position = "right"
+      panel.grid = ggplot2::element_line(color = "#E8E6E0", linewidth = 0.2)
     )
 }

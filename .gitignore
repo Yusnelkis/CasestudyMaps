@@ -36,6 +36,9 @@ data/eprtr_co2_emissions.csv
 !data/README.md
 !output/.gitkeep
 
+# R plot artifacts
+Rplots.pdf
+
 # OS files
 .DS_Store
 Thumbs.db

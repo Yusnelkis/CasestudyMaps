@@ -1,16 +1,23 @@
-# CasestudyMaps: Geospatial ML with `mbg`
+# CasestudyMaps: Emisiones Industriales en Europa (E-PRTR)
 
-Proyecto para explorar **Model-Based Geostatistics (mbg)** — un paquete de R para Machine Learning espacial que respeta la autocorrelacion espacial mediante modelos Bayesianos.
+Caso de estudio de **geoestadistica con Machine Learning** aplicado a emisiones industriales de CO2 en Europa, usando el paquete R [`mbg`](https://cran.r-project.org/package=mbg) (Model-Based Geostatistics).
 
-## Que es mbg?
+## Objetivo
 
-La mayoria de modelos ML ignoran la autocorrelacion espacial, lo que puede generar errores graves. `mbg` resuelve esto combinando ML con geoestadistica Bayesiana:
+Modelar la distribucion espacial de emisiones industriales de CO2 en la UE a partir de datos del **European Pollutant Release and Transfer Register (E-PRTR)**, combinando:
 
-- Soporte completo para objetos `sf` y `terra`
-- Ajuste Bayesiano via INLA o TMB
-- Predicciones espaciales con intervalos de credibilidad
-- Validacion cruzada espacial (spatial CV)
-- Aplicaciones en epidemiologia, medio ambiente, agricultura y mas
+- **Datos puntuales**: ~33,000 instalaciones industriales con coordenadas y emisiones reportadas
+- **Covariables raster**: Calidad del aire (CAMS), uso del suelo (CORINE), densidad de poblacion
+- **Limites administrativos**: Regiones NUTS para agregacion con incertidumbre
+
+El modelo captura la **autocorrelacion espacial** de las emisiones, algo que los modelos ML tradicionales ignoran.
+
+## Por que es relevante?
+
+- Conecta directamente con la **Directiva de Emisiones Industriales** de la UE
+- Identifica **hotspots de descarbonizacion** y patrones espaciales
+- Genera superficies continuas de emision con **cuantificacion de incertidumbre**
+- Evalua la relacion entre emisiones y factores socio-ambientales
 
 ## Inicio rapido
 
@@ -20,8 +27,11 @@ La mayoria de modelos ML ignoran la autocorrelacion espacial, lo que puede gener
 # 2. Instalar dependencias
 source("scripts/00_setup.R")
 
-# 3. Explorar el paquete
-source("scripts/01_explore_mbg.R")
+# 3. Descargar datos publicos
+source("scripts/00_download_data.R")
+
+# 4. Explorar los datos
+source("scripts/01_explore_data.R")
 ```
 
 ## Estructura del proyecto
@@ -29,33 +39,42 @@ source("scripts/01_explore_mbg.R")
 ```
 scripts/
   00_setup.R                 # Instalacion de dependencias
-  01_explore_mbg.R           # Exploracion del paquete y datos ejemplo
-  02_data_preparation.R      # Carga y preparacion de datos espaciales
-  03_covariate_modeling.R    # Modelado ML de covariables (stacking)
-  04_spatial_model.R         # Ajuste del modelo geoestadistico
-  05_prediction_validation.R # Predicciones, validacion y mapas
+  00_download_data.R         # Descarga de datos E-PRTR, NUTS, CORINE
+  01_explore_data.R          # Exploracion de emisiones y covariables
+  02_data_preparation.R      # Preparacion de datos para mbg
+  03_covariate_modeling.R    # Stacking ML (elastic net, GBM, random forest)
+  04_spatial_model.R         # Modelo geoestadistico Bayesiano (INLA + SPDE)
+  05_prediction_validation.R # Predicciones, validacion cruzada, mapas
 
 R/
   utils.R                    # Funciones auxiliares compartidas
 
-data/                        # Datos espaciales (rasters, shapefiles, CSV)
-output/                      # Resultados generados (mapas, tablas)
+data/                        # Datos descargados (E-PRTR, NUTS, rasters)
+output/                      # Resultados: mapas, tablas, modelos
 docs/                        # Referencias y documentacion
 ```
 
 ## Flujo de trabajo
 
-1. **Preparacion de datos** — Cargar puntos observados, covariables raster y limites administrativos
-2. **Modelado de covariables** — Stacking con multiples algoritmos ML (elastic net, GBM, random forest)
-3. **Modelo geoestadistico** — Ajustar proceso Gaussiano espacial con mesh SPDE via INLA
-4. **Prediccion** — Generar superficies continuas con cuantificacion de incertidumbre
-5. **Validacion** — Cross-validation espacial y agregacion a regiones administrativas
+1. **Descarga de datos** -- E-PRTR (emisiones), NUTS (limites), CORINE (uso del suelo), poblacion
+2. **Exploracion** -- Distribucion espacial de emisiones, sectores industriales, patrones
+3. **Preparacion** -- Limpieza, transformacion log, alineacion CRS, raster de IDs
+4. **Covariables ML** -- Stacking con elastic net, GBM y random forest
+5. **Modelo espacial** -- Proceso Gaussiano con mesh SPDE via INLA
+6. **Prediccion y validacion** -- Superficies de emision, incertidumbre, CV espacial
+
+## Fuentes de datos
+
+| Dataset | Fuente | Formato |
+|---------|--------|---------|
+| E-PRTR emisiones | [EEA Industrial Emissions Portal](https://industry.eea.europa.eu/download) | CSV |
+| NUTS boundaries | [Eurostat GISCO](https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics) | GeoJSON |
+| CORINE Land Cover | [Copernicus Land](https://land.copernicus.eu/en/products/corine-land-cover) | GeoTIFF |
+| Densidad de poblacion | [Eurostat / JRC GHSL](https://ghsl.jrc.ec.europa.eu/) | GeoTIFF |
 
 ## Recursos
 
-- [CRAN: mbg](https://cran.r-project.org/package=mbg)
-- [GitHub: henryspatialanalysis/mbg](https://github.com/henryspatialanalysis/mbg)
-- [Documentacion completa](https://henryspatialanalysis.github.io/mbg/)
-- [Vignette: Getting Started](https://cran.r-project.org/web/packages/mbg/vignettes/mbg.html)
-- [Vignette: Spatial ML Models](https://cran.r-project.org/web/packages/mbg/vignettes/spatial-ml-models.html)
-- [Vignette: Model Comparison](https://cran.r-project.org/web/packages/mbg/vignettes/model-comparison.html)
+- [mbg CRAN](https://cran.r-project.org/package=mbg) | [GitHub](https://github.com/henryspatialanalysis/mbg) | [Docs](https://henryspatialanalysis.github.io/mbg/)
+- [E-PRTR Industrial Emissions Portal](https://industry.eea.europa.eu/)
+- [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/)
+- [Eurostat GISCO](https://ec.europa.eu/eurostat/web/gisco)

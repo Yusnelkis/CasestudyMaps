@@ -1,80 +1,122 @@
 # =============================================================================
-# 03_covariate_modeling.R — Modelado ML de covariables (stacking)
+# 03_covariate_modeling.R — Modelado ML de covariables para emisiones CO2
 # =============================================================================
-# Objetivo: Usar multiples algoritmos ML para modelar la relacion entre
-#           covariables raster y la variable de respuesta. Los resultados
-#           se combinan ("stacking") como insumo para el modelo espacial.
+# Objetivo: Entrenar modelos ML para predecir emisiones CO2 a partir de
+#           covariables espaciales (uso del suelo, poblacion, etc.)
+#           Los resultados se usan como stacking en el modelo geoestadistico.
 
 source("R/utils.R")
 load_project_packages()
 
-# --- 0. Cargar datos preparados (ejecutar 02 primero) ------------------------
-# Si guardaste los objetos:
-# point_data <- readRDS("data/prepared_points.rds")
-# covariates <- terra::rast("data/covariates_stack.tif")
+# --- 0. Cargar datos preparados -----------------------------------------------
 
-# Para este ejemplo, usamos datos del paquete
-data("benin_stunting_data", package = "mbg")
-data("benin_covariates", package = "mbg")
+mbg_input <- readRDS("data/prepared_emissions.rds")
+nuts2_eu <- readRDS("data/nuts2_eu.rds")
+
+cat(sprintf("Datos cargados: %d instalaciones\n", nrow(mbg_input)))
 
 # --- 1. Configurar validacion cruzada ----------------------------------------
 
 cv_settings <- caret::trainControl(
   method = "repeatedcv",
   number = 5,          # 5 folds
-  repeats = 5,         # 5 repeticiones
+  repeats = 3,         # 3 repeticiones
   savePredictions = "final",
   allowParallel = TRUE
 )
 
-cat("Validacion cruzada: 5-fold x 5 repeticiones\n")
+cat("Validacion cruzada: 5-fold x 3 repeticiones\n")
 
 # --- 2. Definir modelos ML ---------------------------------------------------
 
-# Lista de algoritmos para stacking
 model_list <- c(
-  "glmnet",     # Elastic Net (regresion regularizada)
+  "glmnet",     # Elastic Net (regularizacion L1+L2)
   "gbm",        # Gradient Boosted Trees
   "ranger"      # Random Forest (implementacion rapida)
 )
 
 cat("Modelos a entrenar:", paste(model_list, collapse = ", "), "\n")
 
-# --- 3. Entrenar modelos de covariables --------------------------------------
-# mbg puede hacer el stacking internamente via MbgModelRunner,
-# pero tambien puedes hacerlo manualmente con caret.
+# --- 3. Extraer valores de covariables en puntos de emision -------------------
+# Si tienes covariables raster, extrae sus valores en las ubicaciones
+# de las instalaciones.
 
-# Ejemplo manual con caret:
-# results <- list()
-# for (model_name in model_list) {
-#   cat("Entrenando:", model_name, "...\n")
-#   results[[model_name]] <- caret::train(
-#     x = covariate_values,   # Valores de covariables en puntos de observacion
-#     y = response,            # Variable de respuesta
-#     method = model_name,
-#     trControl = cv_settings,
-#     tuneLength = 5
-#   )
-# }
+# Ejemplo con covariables raster:
+# covariate_stack <- terra::rast(list.files("data/covariates", "\\.tif$",
+#                                           full.names = TRUE))
+# cov_values <- terra::extract(covariate_stack,
+#                              cbind(mbg_input$longitude, mbg_input$latitude))
 
-# --- 4. Evaluar importancia de covariables ------------------------------------
+# Mientras no tengamos rasters, podemos usar coordenadas como proxy
+# (la latitud y longitud capturan gradientes climaticos a escala continental)
+train_x <- data.frame(
+  longitude = mbg_input$longitude,
+  latitude = mbg_input$latitude
+)
+train_y <- mbg_input$log_co2
 
-# Para cada modelo entrenado, evaluar que covariables son mas importantes:
-# for (model_name in names(results)) {
-#   imp <- caret::varImp(results[[model_name]])
-#   cat("\n=== Importancia de variables:", model_name, "===\n")
-#   print(imp)
-# }
+cat(sprintf("\nMatriz de entrenamiento: %d obs x %d covariables\n",
+            nrow(train_x), ncol(train_x)))
 
-# --- 5. Nota sobre stacking en mbg -------------------------------------------
-# En la practica, MbgModelRunner maneja el stacking automaticamente.
-# Solo necesitas especificar:
-#   - Los rasters de covariables
-#   - Los metodos ML a usar
-#   - La configuracion de CV
+# --- 4. Entrenar modelos de covariables --------------------------------------
+
+results <- list()
+
+for (model_name in model_list) {
+  cat(sprintf("Entrenando: %s...\n", model_name))
+
+  tryCatch({
+    results[[model_name]] <- caret::train(
+      x = train_x,
+      y = train_y,
+      method = model_name,
+      trControl = cv_settings,
+      tuneLength = 5,
+      verbose = FALSE
+    )
+    cat(sprintf("  RMSE (CV): %.3f\n", min(results[[model_name]]$results$RMSE)))
+  }, error = function(e) {
+    cat(sprintf("  Error: %s\n", e$message))
+  })
+}
+
+# --- 5. Comparar modelos -----------------------------------------------------
+
+if (length(results) > 1) {
+  cat("\n=== Comparacion de modelos ML ===\n")
+  comparison <- caret::resamples(results)
+  print(summary(comparison))
+
+  # Importancia de variables
+  for (model_name in names(results)) {
+    cat(sprintf("\n--- Importancia de variables: %s ---\n", model_name))
+    tryCatch({
+      imp <- caret::varImp(results[[model_name]])
+      print(imp)
+    }, error = function(e) {
+      cat("  No disponible para este modelo\n")
+    })
+  }
+}
+
+# --- 6. Nota sobre stacking en mbg -------------------------------------------
+# En el pipeline completo, MbgModelRunner maneja el stacking internamente:
 #
-# El runner genera predicciones stacked que se usan como covariable
-# en el modelo geoestadistico (script 04).
+#   runner <- mbg::MbgModelRunner$new(
+#     ...
+#     use_stacking = TRUE,
+#     stacking_cv_settings = list(method = "repeatedcv", number = 5, repeats = 3),
+#     stacking_model_settings = list(enet = NULL, gbm = NULL, treebag = NULL),
+#     ...
+#   )
+#
+# Aqui entrenamos manualmente para entender el proceso y evaluar
+# que covariables son mas informativas antes del modelo espacial.
+
+# --- 7. Guardar resultados ---------------------------------------------------
+
+saveRDS(results, "output/ml_covariate_models.rds")
+cat("\nModelos guardados en output/ml_covariate_models.rds\n")
 
 cat("\nModelado de covariables completado.\n")
 cat("Continua con 04_spatial_model.R\n")

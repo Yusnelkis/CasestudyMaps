@@ -32,6 +32,10 @@ data/nuts/*.geojson
 # Downloaded data (regenerable via 00_download_data.R)
 data/eprtr_co2_emissions.csv
 
+# Model outputs (regenerable via scripts)
+output/*.rds
+output/*.tif
+
 # Keep placeholder files
 !data/README.md
 !output/.gitkeep

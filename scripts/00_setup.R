@@ -20,7 +20,11 @@ cran_pkgs <- c(
   "scales",       # Escalas para graficos
   "viridis",      # Paletas de color
   "countrycode",  # Codigos de pais ISO/NUTS
-  "jsonlite"      # API JSON (DiscoData)
+  "jsonlite",     # API JSON (DiscoData)
+  "scoringRules", # CRPS y metricas de puntaje Bayesiano
+  "spdep",        # Moran's I, residual spatial diagnostics
+  "blockCV",      # Validacion cruzada con bloques espaciales
+  "gstat"         # IDW y geoestadistica clasica (baseline)
 )
 
 installed <- installed.packages()[, "Package"]

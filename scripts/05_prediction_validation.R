@@ -1,8 +1,8 @@
 # =============================================================================
 # 05_prediction_validation.R — Predicciones, validacion y mapas de emisiones
 # =============================================================================
-# Objetivo: Generar superficies continuas de emision CO2 con incertidumbre,
-#           validar el modelo y crear mapas de resultados.
+# Objetivo: Generar mapas finales de prediccion, validar el modelo y
+#           agregar resultados a regiones NUTS2.
 
 source("R/utils.R")
 load_project_packages()
@@ -12,166 +12,196 @@ load_project_packages()
 mbg_input <- readRDS("data/prepared_emissions.rds")
 nuts2_eu <- readRDS("data/nuts2_eu.rds")
 
-# Cargar modelo ajustado (despues de ejecutar 04)
-# runner <- readRDS("output/fitted_spatial_model.rds")
+# Cargar rasters de prediccion (guardados como GeoTIFF)
+mean_raster <- if (file.exists("output/04_pred_mean.tif"))
+  terra::rast("output/04_pred_mean.tif") else NULL
+unc_raster <- if (file.exists("output/04_pred_uncertainty.tif"))
+  terra::rast("output/04_pred_uncertainty.tif") else NULL
 
-# --- 1. Generar predicciones espaciales ---------------------------------------
-# mbg genera draws posteriores por celda, permitiendo cuantificar
-# la incertidumbre en cada ubicacion del raster.
+cat(sprintf("Datos: %d instalaciones\n", nrow(mbg_input)))
 
-cat("=== Generando predicciones espaciales ===\n")
-
-# Descomentar despues de ajustar el modelo:
-# predictions <- runner$grid_cell_predictions
-
-# --- 2. Resumir predicciones --------------------------------------------------
-# Calcular estadisticos a partir de los draws posteriores.
-# Las predicciones estan en escala log -> transformar a escala original.
-
-# pred_mean <- apply(predictions, 1, mean)
-# pred_lower <- apply(predictions, 1, quantile, probs = 0.025)
-# pred_upper <- apply(predictions, 1, quantile, probs = 0.975)
-#
-# # Transformar de log a escala original (toneladas CO2)
-# pred_mean_original <- exp(pred_mean)
-# pred_lower_original <- exp(pred_lower)
-# pred_upper_original <- exp(pred_upper)
-#
-# # Ancho del intervalo de credibilidad (incertidumbre)
-# pred_uncertainty <- pred_upper - pred_lower
-#
-# cat(sprintf("Rango de predicciones (media log): %.2f - %.2f\n",
-#             min(pred_mean), max(pred_mean)))
-# cat(sprintf("Rango de predicciones (media ton): %.0f - %.0f\n",
-#             min(pred_mean_original), max(pred_mean_original)))
-# cat(sprintf("Ancho promedio IC 95%% (log): %.2f\n",
-#             mean(pred_uncertainty)))
-
-# --- 3. Validacion cruzada espacial ------------------------------------------
-
-cat("\n=== Validacion cruzada espacial ===\n")
-
-# Crear holdouts para k-fold CV
-# n_folds <- 5
-# set.seed(42)
-# mbg_input$holdout_id <- sample(rep(1:n_folds, length.out = nrow(mbg_input)))
-#
-# # La validacion cruzada espacial evalua si el modelo predice bien
-# # en regiones no observadas (critico para interpolacion)
-# cv_metrics <- data.table::data.table()
-#
-# for (fold in 1:n_folds) {
-#   cat(sprintf("  Fold %d/%d...\n", fold, n_folds))
-#   train_data <- mbg_input[holdout_id != fold]
-#   test_data <- mbg_input[holdout_id == fold]
-#
-#   # Ajustar modelo en datos de entrenamiento
-#   # cv_runner <- mbg::MbgModelRunner$new(...)
-#   # cv_runner$run_mbg_pipeline()
-#
-#   # Evaluar en datos de test
-#   # fold_metrics <- cv_runner$get_predictive_validity(
-#   #   in_sample = FALSE,
-#   #   validation_data = test_data
-#   # )
-#   # cv_metrics <- rbind(cv_metrics, fold_metrics)
-# }
-#
-# cat("\n=== Metricas de validacion cruzada ===\n")
-# cat(sprintf("RMSE (out-of-sample): %.3f\n", mean(cv_metrics$rmse)))
-# cat(sprintf("LPD  (out-of-sample): %.3f\n", sum(cv_metrics$lpd)))
-
-# --- 4. Agregacion a regiones NUTS 2 -----------------------------------------
-# Resumir predicciones por region administrativa
+# --- 1. Predicciones agregadas a NUTS2 ----------------------------------------
 
 cat("\n=== Agregacion a NUTS 2 ===\n")
 
-# admin_predictions <- runner$aggregated_predictions
-#
-# # Unir con geometria para mapear
-# nuts2_results <- merge(
-#   nuts2_eu,
-#   admin_predictions,
-#   by.x = "NUTS_ID",
-#   by.y = "region_id",
-#   all.x = TRUE
-# )
+# Intentar cargar predicciones agregadas del modelo
+runner <- tryCatch(readRDS("output/fitted_spatial_model.rds"), error = function(e) NULL)
+admin_preds <- if (!is.null(runner)) runner$aggregated_predictions else NULL
 
-# --- 5. Mapas de resultados --------------------------------------------------
+if (!is.null(admin_preds) && length(admin_preds) > 0) {
+  # Inspeccionar estructura
+  cat("Predicciones agregadas disponibles.\n")
 
-cat("\n=== Generando mapas ===\n")
+  # Si es lista de data.tables (por nivel de agregacion)
+  if (is.list(admin_preds) && !is.data.frame(admin_preds)) {
+    pred_dt <- admin_preds[[1]]
+  } else {
+    pred_dt <- admin_preds
+  }
 
-# --- 5a. Mapa de prediccion media (superficie continua de emisiones) ---
-# Usa la paleta pal_emissions del tema satelital
-# p_mean <- tmap::tm_shape(pred_raster_mean) +
-#   tmap::tm_raster(
-#     col = "mean_co2",
-#     palette = pal_emissions,
-#     title = "log(CO2 ton/anio)"
-#   ) +
-#   tmap::tm_shape(nuts2_eu) +
-#   tmap::tm_borders(col = palette_satellite$olive, lwd = 0.5) +
-#   tmap::tm_layout(
-#     title = "Emisiones industriales CO2 — Prediccion media",
-#     legend.outside = TRUE,
-#     bg.color = col_land
-#   )
-#
-# print(p_mean)
-# save_plot(p_mean, "05_mapa_prediccion_co2.png")
+  if (!is.null(pred_dt) && nrow(pred_dt) > 0) {
+    cat(sprintf("Regiones con prediccion: %d\n", nrow(pred_dt)))
+    print(head(pred_dt))
 
-# --- 5b. Mapa de incertidumbre (ancho del IC 95%) ---
-# Usa paleta cyan->navy para incertidumbre
-# pal_uncertainty <- c(palette_satellite$cyan_light,
-#                      palette_satellite$cyan,
-#                      palette_satellite$blue_river,
-#                      palette_satellite$navy)
-#
-# p_unc <- tmap::tm_shape(pred_raster_uncertainty) +
-#   tmap::tm_raster(
-#     col = "uncertainty",
-#     palette = pal_uncertainty,
-#     title = "Ancho IC 95%"
-#   ) +
-#   tmap::tm_layout(
-#     title = "Incertidumbre espacial de emisiones CO2",
-#     legend.outside = TRUE,
-#     bg.color = col_land
-#   )
-#
-# print(p_unc)
-# save_plot(p_unc, "05_mapa_incertidumbre_co2.png")
+    # Unir con geometria para mapear
+    nuts2_results <- merge(
+      nuts2_eu,
+      pred_dt,
+      by.x = "NUTS_ID",
+      by.y = names(pred_dt)[1],  # Primera columna = ID del poligono
+      all.x = TRUE
+    )
 
-# --- 5c. Mapa coropletico NUTS 2 (emisiones agregadas por region) ---
-# p_nuts <- ggplot2::ggplot(nuts2_results) +
-#   ggplot2::geom_sf(ggplot2::aes(fill = mean_co2), color = col_borders,
-#                    linewidth = 0.2) +
-#   scale_fill_emissions(name = "Media\nlog(CO2)", na.value = "#E8E6E0") +
-#   ggplot2::coord_sf(xlim = c(-12, 35), ylim = c(34, 72)) +
-#   theme_map() +
-#   ggplot2::labs(
-#     title = "Emisiones CO2 agregadas por region NUTS 2",
-#     subtitle = "Modelo geoestadistico mbg — con intervalos de credibilidad",
-#     caption = "Fuente: E-PRTR | Modelo: mbg (INLA + SPDE)"
-#   )
-#
-# print(p_nuts)
-# save_plot(p_nuts, "05_mapa_nuts2_emisiones.png")
+    # Mapa coropletico NUTS2
+    # Buscar columna de media
+    mean_col <- intersect(c("mean", "median", "estimate"), names(pred_dt))
+    if (length(mean_col) > 0) {
+      mean_col <- mean_col[1]
 
-# --- 6. Resumen final --------------------------------------------------------
+      p_nuts <- ggplot2::ggplot(nuts2_results) +
+        ggplot2::geom_sf(
+          ggplot2::aes(fill = .data[[mean_col]]),
+          color = col_borders, linewidth = 0.15
+        ) +
+        scale_fill_emissions(
+          name = "Media\nlog(CO2)",
+          na.value = "#E8E6E0"
+        ) +
+        ggplot2::coord_sf(xlim = c(-12, 35), ylim = c(34, 72)) +
+        theme_map() +
+        ggplot2::labs(
+          title = "Emisiones CO2 por NUTS 2 — Estimaciones del modelo mbg",
+          subtitle = "Predicciones agregadas con incertidumbre Bayesiana",
+          caption = "Fuente: E-PRTR | Modelo: mbg (INLA + SPDE)"
+        )
+
+      print(p_nuts)
+      save_plot(p_nuts, "05_mapa_nuts2_modelo.png")
+    }
+  }
+} else {
+  cat("No hay predicciones agregadas disponibles.\n")
+}
+
+# --- 2. Predicciones por celda ------------------------------------------------
+
+cat("\n=== Predicciones por celda ===\n")
+
+# Usar rasters cargados desde GeoTIFF (evita problema de serialization de SpatRaster)
+
+if (!is.null(mean_raster)) {
+
+  # Mapa de prediccion media
+  mean_df <- as.data.frame(mean_raster, xy = TRUE, na.rm = TRUE)
+  names(mean_df)[3] <- "log_co2"
+
+  p_surface <- ggplot2::ggplot() +
+    ggplot2::geom_raster(data = mean_df,
+                         ggplot2::aes(x = x, y = y, fill = log_co2)) +
+    ggplot2::geom_sf(data = nuts2_eu, fill = NA, color = "white",
+                     linewidth = 0.1) +
+    scale_fill_emissions(name = "log(CO2\nton/anio)") +
+    ggplot2::coord_sf(xlim = c(-12, 35), ylim = c(34, 72)) +
+    theme_map_dark() +
+    ggplot2::labs(
+      title = "Superficie de emisiones CO2 en Europa",
+      subtitle = "Interpolacion geoestadistica Bayesiana (mbg)",
+      caption = "Fuente: E-PRTR | Modelo: INLA + SPDE"
+    )
+
+  print(p_surface)
+  save_plot(p_surface, "05_superficie_emisiones.png")
+
+  # Mapa de incertidumbre
+  if (!is.null(unc_raster)) {
+    unc_df <- as.data.frame(unc_raster, xy = TRUE, na.rm = TRUE)
+    names(unc_df)[3] <- "uncertainty"
+
+    p_unc <- ggplot2::ggplot() +
+      ggplot2::geom_raster(data = unc_df,
+                           ggplot2::aes(x = x, y = y, fill = uncertainty)) +
+      ggplot2::geom_sf(data = nuts2_eu, fill = NA, color = "white",
+                       linewidth = 0.1) +
+      ggplot2::scale_fill_gradientn(
+        colours = c(palette_satellite$cyan_light, palette_satellite$cyan,
+                    palette_satellite$blue_river, palette_satellite$navy),
+        name = "Ancho\nIC 95%"
+      ) +
+      ggplot2::coord_sf(xlim = c(-12, 35), ylim = c(34, 72)) +
+      theme_map_dark() +
+      ggplot2::labs(
+        title = "Incertidumbre en la prediccion de emisiones CO2",
+        subtitle = "Ancho del intervalo de credibilidad 95%",
+        caption = "Fuente: E-PRTR | Modelo: mbg (INLA + SPDE)"
+      )
+
+    print(p_unc)
+    save_plot(p_unc, "05_mapa_incertidumbre.png")
+  }
+}
+
+# --- 3. Validacion in-sample -------------------------------------------------
+
+cat("\n=== Validacion in-sample ===\n")
+
+# Comparar predicciones vs. observaciones
+if (!is.null(mean_raster)) {
+  # Extraer prediccion media en puntos observados
+  obs_coords <- cbind(mbg_input$x, mbg_input$y)
+  pred_at_obs <- terra::extract(mean_raster, obs_coords)[, 1]
+
+  valid_idx <- !is.na(pred_at_obs)
+  observed <- mbg_input$indicator[valid_idx]
+  predicted <- pred_at_obs[valid_idx]
+
+  rmse <- sqrt(mean((observed - predicted)^2))
+  cor_val <- cor(observed, predicted)
+  mae <- mean(abs(observed - predicted))
+
+  cat(sprintf("  RMSE:        %.3f\n", rmse))
+  cat(sprintf("  MAE:         %.3f\n", mae))
+  cat(sprintf("  Correlacion: %.3f\n", cor_val))
+  cat(sprintf("  N validos:   %d / %d\n", sum(valid_idx), length(valid_idx)))
+
+  # Scatterplot observado vs predicho
+  val_df <- data.frame(observed = observed, predicted = predicted)
+
+  p_scatter <- ggplot2::ggplot(val_df,
+      ggplot2::aes(x = observed, y = predicted)) +
+    ggplot2::geom_point(alpha = 0.3, color = palette_satellite$blue_river,
+                        size = 1.5) +
+    ggplot2::geom_abline(slope = 1, intercept = 0,
+                         color = palette_satellite$magenta,
+                         linetype = "dashed", linewidth = 0.8) +
+    ggplot2::labs(
+      title = "Validacion in-sample: Observado vs. Predicho",
+      subtitle = sprintf("RMSE = %.3f | r = %.3f | n = %d",
+                         rmse, cor_val, sum(valid_idx)),
+      x = "log(CO2) observado",
+      y = "log(CO2) predicho",
+      caption = "Linea roja = 1:1 (prediccion perfecta)"
+    ) +
+    theme_satellite()
+
+  print(p_scatter)
+  save_plot(p_scatter, "05_validacion_scatter.png")
+}
+
+# --- 4. Resumen final --------------------------------------------------------
 
 cat("\n")
-cat("=" %>% rep(60) %>% paste(collapse = ""), "\n")
+cat(strrep("=", 60), "\n")
 cat("PIPELINE COMPLETADO\n")
-cat("=" %>% rep(60) %>% paste(collapse = ""), "\n")
-cat("\n")
-cat("Resultados generados:\n")
-cat("  - Superficie continua de emisiones CO2 (media + IC 95%%)\n")
-cat("  - Mapa de incertidumbre espacial\n")
-cat("  - Agregacion por regiones NUTS 2\n")
-cat("  - Metricas de validacion cruzada espacial\n")
-cat("\nArchivos en: output/\n")
+cat(strrep("=", 60), "\n\n")
+
+cat("Graficos generados en output/:\n")
+output_files <- list.files("output", pattern = "^0[45]_.*\\.png$")
+for (f in output_files) {
+  cat(sprintf("  %s\n", f))
+}
+
 cat("\nInterpretacion:\n")
 cat("  - Hotspots: zonas con alta media y baja incertidumbre\n")
 cat("  - Gaps de datos: zonas con alta incertidumbre\n")
 cat("  - Transicion climatica: comparar hotspots vs. politicas regionales\n")
+cat("  - Autocorrelacion: el rango del GP indica la distancia de influencia\n")
